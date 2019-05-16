@@ -6,9 +6,52 @@ node_js:
   - "10.0"
   - "9.10.0"
 
+services:
+  - docker
+
+stages:
+  - name: test
+  - name: test-build
+  - name: build
+    if: |
+      tag =~ /^v\d+\.\d+(\.\d+)?(-\S*)?$/ || \
+      tag =~ /^dev\/v\d+\.\d+(\.\d+)?(-\S*)?$/ || \
+      tag =~ /^release\/v\d+\.\d+(\.\d+)?(-\S*)?$/ || \
+      tag =~ /^prod\/v\d+\.\d+(\.\d+)?(-\S*)?$/
+  - name: deploy
+    if: |
+      tag =~ /^v\d+\.\d+(\.\d+)?(-\S*)?$/ || \
+      tag =~ /^dev\/v\d+\.\d+(\.\d+)?(-\S*)?$/ || \
+      tag =~ /^release\/v\d+\.\d+(\.\d+)?(-\S*)?$/ || \
+      tag =~ /^prod\/v\d+\.\d+(\.\d+)?(-\S*)?$/
+
 install:
   - yarn install
 
 script:
+  - yarn list
+  # - yarn check
   # - yarn test
-  - yarn run build
+
+jobs:
+  include:
+    - stage: test-build
+      install:
+        - yarn install
+
+      script:
+        - yarn run build
+
+    - stage: build
+      before_script:
+        - git clone https://$GITHUB_TOKEN@github.com/SamwelOpiyo/turing_devops_challenge.git ../turing_devops_challenge/
+        - cp ../turing_devops_challenge/React/* .
+      script:
+        - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+        - docker build -t $DOCKER_HUB_USER/turing_react:$(echo $TRAVIS_TAG | tr "/" .) -f Dockerfile-multibuild .
+        - docker push $DOCKER_HUB_USER/turing_react:$(echo $TRAVIS_TAG | tr "/" .)
+        - docker rmi $DOCKER_HUB_USER/turing_react:$(echo $TRAVIS_TAG | tr "/" .)
+        - docker logout
+
+    # - stage: deploy
+      # script: ./deploy
